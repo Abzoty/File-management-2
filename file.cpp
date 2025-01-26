@@ -176,7 +176,7 @@ int InsertNewRecordAtIndex(const char *filename, int recordID, int reference)
     return Insert(filename, 1, recordID, reference);
 }
 
-/* void DeleteRecordFromIndex(const char *filename, int recordID)
+void DeleteRecordFromIndex(const char *filename, int recordID)
 {
     Node rootNode = readNode(filename, 1);
     for (int i = 0; i < MAX_RECORDS - 2; i += 2)
@@ -185,12 +185,12 @@ int InsertNewRecordAtIndex(const char *filename, int recordID, int reference)
         {
             rootNode.records[i] = -1;
             rootNode.records[i + 1] = -1;
-            for (int j = i; j < MAX_RECORDS - 4; j += 2)
+            for (int j = i; j < MAX_RECORDS -2; j += 2)
             {
                 rootNode.records[j] = rootNode.records[j + 2];
                 rootNode.records[j + 1] = rootNode.records[j + 3];
             }
-            rootNode.records[MAX_RECORDS - 4] = -1;
+            rootNode.records[MAX_RECORDS - 2] = -1;
             rootNode.records[MAX_RECORDS - 3] = -1;
             writeNode(filename, 1, rootNode);
             return;
@@ -209,7 +209,7 @@ int SearchARecord(const char *filename, int recordID)
         }
     }
     return -1; // Not found
-} */
+} 
 
 void DisplayIndexFileContent(const char *filename)
 {
@@ -248,21 +248,32 @@ int main()
     cout << "Index File Content After Insertions:" << endl;
     DisplayIndexFileContent(filename);
 
-    // InsertNewRecordAtIndex(filename, 19, 84);
+    InsertNewRecordAtIndex(filename, 19, 84);
 
-    // cout << "Index File Content After Split:" << endl;
-    // DisplayIndexFileContent(filename);
+    cout << "Index File Content After Split:" << endl;
+    DisplayIndexFileContent(filename);
 
-    // DeleteRecordFromIndex(filename, 10);
+    DeleteRecordFromIndex(filename, 10);
 
-    // cout << "Index File Content After Deletion:" << endl;
-    // DisplayIndexFileContent(filename);
+    cout << "Index File Content After Deletion:" << endl;
+    DisplayIndexFileContent(filename);
 
-    // int ref = SearchARecord(filename, 7);
-    // if (ref != -1)
-    //     cout << "Record 7 found with reference: " << ref << endl;
-    // else
-    //     cout << "Record 7 not found." << endl;
+    int ref = SearchARecord(filename, 7);
+    if (ref != -1)
+        cout << "Record 7 found with reference: " << ref << endl;
+    else
+        cout << "Record 7 not found." << endl;
+    
+    DeleteRecordFromIndex(filename, 7);
+
+    cout << "Index File Content After Deletion:" << endl;
+    DisplayIndexFileContent(filename);
+
+    int ref2 = SearchARecord(filename, 7);
+    if (ref2 != -1)
+        cout << "Record 7 found with reference: " << ref2 << endl;
+    else
+        cout << "Record 7 not found." << endl;
 
     return 0;
 }
