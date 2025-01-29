@@ -55,7 +55,7 @@ void writeNode(const char *filename, int nodeIndex, const Node &node)
     file.close();
 }
 
-int findInsertPosition(const Node &node, int recordID)
+int findInsertAtPosition(const Node &node, int recordID)
 {
     int pos = 0;
 
@@ -64,7 +64,18 @@ int findInsertPosition(const Node &node, int recordID)
         return pos;
     }
 
-    while (pos < MAX_RECORDS - 2 && node.records[pos] != -1 && node.records[pos] < recordID)
+    while (pos < MAX_RECORDS - 2 && node.records[pos] != -1 && node.records[pos] <= recordID)
+    {
+        pos += 2;
+    }
+    return pos;
+}
+
+int findInsertParentPosition(const Node &node, int recordID)
+{
+    int pos = 0;
+
+    while (pos < MAX_RECORDS - 2 && node.records[pos] != -1 && node.records[pos] <= recordID)
     {
         pos += 2;
     }
@@ -111,18 +122,201 @@ void updateHead()
     }
 
     Node head = readNode("index.bin", 0);
+    if (i > 9)
+        i = -1;
     head.records[0] = i;
     writeNode("index.bin", 0, head);
 }
 
-int Insert(const char *filename, int nodeIndex, int recordID, int reference)
+int getFreeNodeIndex()
+{
+    Node head = readNode("index.bin", 0);
+    return head.records[0];
+}
+
+int InsertParent(const char *filename, int nodeIndex, int recordID, int reference)
+{
+    Node rootNode = readNode(filename, nodeIndex);
+    int pos = 0;
+    while (pos < MAX_RECORDS - 2 && rootNode.records[pos] != -1)
+    {
+        if (rootNode.records[pos] == recordID)
+        {
+            rootNode.records[pos + 1] = reference;
+            writeNode(filename, nodeIndex, rootNode);
+            return nodeIndex;
+        }
+        pos += 2;
+    }
+    if (nodeIndex == 1 && rootNode.records[MAX_RECORDS - 2] != -1) // Split the root node
+    {
+        vector<pair<int, int>> keys;
+        for (int i = 0; i < MAX_RECORDS - 2; i += 2)
+        {
+            keys.push_back({rootNode.records[i], rootNode.records[i + 1]});
+        }
+        keys.push_back({recordID, reference});
+        sort(keys.begin(), keys.end());
+
+        int medianIndex = keys.size() / 2;
+
+        Node newNodeLeft, newNodeRight;
+        newNodeLeft.nodeType = 0;
+        newNodeRight.nodeType = 0;
+
+        for (int i = 0; i < medianIndex; i++) // 0 1 2 3 4 5 6 7 8 9 10 11
+        {
+            newNodeLeft.records[i * 2] = keys[i].first;
+            newNodeLeft.records[i * 2 + 1] = keys[i].second;
+        }
+
+        for (int i = medianIndex; i < keys.size(); i++)
+        {
+            newNodeRight.records[(i - medianIndex) * 2] = keys[i].first;
+            newNodeRight.records[(i - medianIndex) * 2 + 1] = keys[i].second;
+        }
+
+        int i = 0;
+        while (i < MAX_RECORDS)
+        {
+            rootNode.records[i] = -1;
+            i++;
+        }
+
+        int freeNodeIndex = getFreeNodeIndex();
+        rootNode.records[0] = keys[medianIndex - 1].first;
+        rootNode.records[1] = freeNodeIndex;
+        rootNode.records[2] = keys[keys.size() - 1].first;
+        rootNode.records[3] = freeNodeIndex + 1;
+        rootNode.nodeType = 1;
+        newNodeLeft.nodeType = 1;
+        newNodeRight.nodeType = 1;
+        writeNode(filename, nodeIndex, rootNode);
+        writeNode(filename, freeNodeIndex, newNodeLeft);
+        updateHead();
+        writeNode(filename, freeNodeIndex + 1, newNodeRight);
+        updateHead();
+        return freeNodeIndex + 1;
+    }
+    pos = findInsertParentPosition(rootNode, recordID);
+
+    for (int i = MAX_RECORDS - 2; i > pos; i -= 2)
+    {
+        rootNode.records[i] = rootNode.records[i - 2];
+        rootNode.records[i + 1] = rootNode.records[i - 1];
+    }
+
+    rootNode.records[pos] = recordID;
+    rootNode.records[pos + 1] = reference;
+
+    writeNode(filename, nodeIndex, rootNode);
+
+    return nodeIndex;
+}
+
+int InsertAt(const char *filename, int nodeIndex, int recordID, int reference, int parentIndex)
 {
     Node rootNode = readNode(filename, nodeIndex);
 
     if (rootNode.nodeType == 0 || rootNode.nodeType == -1)
     {
-        // Node is a leaf, find the right position to insert
-        int pos = findInsertPosition(rootNode, recordID);
+
+        if (rootNode.nodeType == 0 && nodeIndex == 1 && rootNode.records[MAX_RECORDS - 2] != -1) // Split the root node
+        {
+            vector<pair<int, int>> keys;
+            for (int i = 0; i < MAX_RECORDS - 2; i += 2)
+            {
+                keys.push_back({rootNode.records[i], rootNode.records[i + 1]});
+            }
+            keys.push_back({recordID, reference});
+            sort(keys.begin(), keys.end());
+
+            int medianIndex = keys.size() / 2;
+
+            Node newNodeLeft, newNodeRight;
+            newNodeLeft.nodeType = 0;
+            newNodeRight.nodeType = 0;
+
+            for (int i = 0; i < medianIndex; i++) // 0 1 2 3 4 5 6 7 8 9 10 11
+            {
+                newNodeLeft.records[i * 2] = keys[i].first;
+                newNodeLeft.records[i * 2 + 1] = keys[i].second;
+            }
+
+            for (int i = medianIndex; i < keys.size(); i++)
+            {
+                newNodeRight.records[(i - medianIndex) * 2] = keys[i].first;
+                newNodeRight.records[(i - medianIndex) * 2 + 1] = keys[i].second;
+            }
+
+            int i = 0;
+            while (i < MAX_RECORDS)
+            {
+                rootNode.records[i] = -1;
+                i++;
+            }
+
+            rootNode.records[0] = keys[medianIndex - 1].first;
+            rootNode.records[1] = nodeIndex + 1;
+            rootNode.records[2] = keys[keys.size() - 1].first;
+            rootNode.records[3] = nodeIndex + 2;
+            rootNode.nodeType = 1;
+            writeNode(filename, nodeIndex, rootNode);
+            writeNode(filename, getFreeNodeIndex(), newNodeLeft);
+            updateHead();
+            writeNode(filename, getFreeNodeIndex(), newNodeRight);
+            updateHead();
+            return nodeIndex + 2;
+        }
+        else if (rootNode.nodeType == 0 && rootNode.records[MAX_RECORDS - 2] != -1) // Split the leaf node
+        {
+            Node newNode;
+            newNode.nodeType = 0;
+
+            // Gather all the data and sort them
+            vector<pair<int, int>> keys;
+            for (int i = 0; i < MAX_RECORDS - 2; i += 2)
+            {
+                if (rootNode.records[i] != -1)
+                {
+                    keys.push_back({rootNode.records[i], rootNode.records[i + 1]});
+                }
+            }
+            keys.push_back({recordID, reference});
+            sort(keys.begin(), keys.end());
+
+            // Determine the median index
+            int medianIndex = keys.size() / 2;
+
+            // Place the first half in the current rootNode
+            for (int i = 0; i < medianIndex; i++)
+            {
+                rootNode.records[i * 2] = keys[i].first;
+                rootNode.records[i * 2 + 1] = keys[i].second;
+            }
+            for (int i = medianIndex * 2; i < MAX_RECORDS - 1; i++)
+            {
+                rootNode.records[i] = -1;
+            }
+
+            // Place the second half in the new node
+            for (int i = medianIndex; i < keys.size(); i++)
+            {
+                newNode.records[(i - medianIndex) * 2] = keys[i].first;
+                newNode.records[(i - medianIndex) * 2 + 1] = keys[i].second;
+            }
+
+            InsertParent(filename, parentIndex, keys[keys.size() - 1].first, getFreeNodeIndex());
+            // Update rootNode and write nodes back to the file
+            writeNode(filename, nodeIndex, rootNode);
+            writeNode(filename, getFreeNodeIndex(), newNode);
+            updateHead();
+            InsertParent(filename, parentIndex, keys[medianIndex - 1].first, nodeIndex);
+
+            return nodeIndex;
+        }
+        // Node is a leaf, find the right position to insertAt
+        int pos = findInsertAtPosition(rootNode, recordID);
 
         if (rootNode.nodeType != -1)
         {
@@ -150,66 +344,88 @@ int Insert(const char *filename, int nodeIndex, int recordID, int reference)
     {
         int childIndex = -1, i = 0;
         // Node is non-leaf, find the first item bigger than recordID
-        while (rootNode.records[i] != -1)
+        while (rootNode.records[i] != -1 && i < MAX_RECORDS - 2)
         {
             if (rootNode.records[i] > recordID)
             {
                 childIndex = rootNode.records[i + 1]; // Return the reference (index + 1)
+                break;
             }
             i += 2;
         }
 
         if (childIndex == -1)
         {
-            // No child found, insert the record in the last child
+            // No child found, insertAt the record in the last child
             childIndex = rootNode.records[i - 1];
+            rootNode.records[i - 2] = recordID;
+            writeNode(filename, nodeIndex, rootNode);
         }
 
-        return Insert(filename, childIndex, recordID, reference);
+        return InsertAt(filename, childIndex, recordID, reference, nodeIndex);
     }
 
     return 1;
 }
 
-int InsertNewRecordAtIndex(const char *filename, int recordID, int reference)
+int InsertAtNewRecordAtIndex(const char *filename, int recordID, int reference)
 {
-    return Insert(filename, 1, recordID, reference);
+    return InsertAt(filename, 1, recordID, reference, 0);
 }
 
 void DeleteRecordFromIndex(const char *filename, int recordID)
 {
-    Node rootNode = readNode(filename, 1);
-    for (int i = 0; i < MAX_RECORDS - 2; i += 2)
+    for (int i = 1; i <= 9; i++)
     {
-        if (rootNode.records[i] == recordID)
+        Node node = readNode(filename, i);
+        for (int j = 0; j < MAX_RECORDS - 2; j += 2)
         {
-            rootNode.records[i] = -1;
-            rootNode.records[i + 1] = -1;
-            for (int j = i; j < MAX_RECORDS -2; j += 2)
+            if (node.records[j] == recordID)
             {
-                rootNode.records[j] = rootNode.records[j + 2];
-                rootNode.records[j + 1] = rootNode.records[j + 3];
+                if (node.nodeType == 0)
+                {
+                    int k;
+                    for (k = j; k < MAX_RECORDS - 4; k += 2)
+                    {
+                        node.records[k] = node.records[k + 2];
+                        node.records[k + 1] = node.records[k + 3];
+                    }
+                    node.records[k] = -1;
+                    node.records[k + 1] = -1;
+                    writeNode(filename, i, node);
+                    return;
+                }
+
+                break;
             }
-            rootNode.records[MAX_RECORDS - 2] = -1;
-            rootNode.records[MAX_RECORDS - 3] = -1;
-            writeNode(filename, 1, rootNode);
-            return;
         }
     }
 }
 
 int SearchARecord(const char *filename, int recordID)
 {
-    Node rootNode = readNode(filename, 1);
-    for (int i = 0; i < MAX_RECORDS - 2; i += 2)
+    int i = 1;
+    while (true)
     {
-        if (rootNode.records[i] == recordID)
+        Node node = readNode(filename, i);
+        for (int j = 0; j < MAX_RECORDS - 2; j += 2)
         {
-            return rootNode.records[i + 1]; // Return reference if found
+            if (node.records[j] >= recordID)
+            {
+                if (node.nodeType == 0)
+                {
+                    return node.records[j + 1];
+                }
+                else
+                {
+                    i = node.records[j + 1];
+                    break;
+                }
+            }
         }
     }
-    return -1; // Not found
-} 
+    return -1;
+}
 
 void DisplayIndexFileContent(const char *filename)
 {
@@ -223,7 +439,7 @@ void DisplayIndexFileContent(const char *filename)
         cout << "Type: " << setw(2) << node.nodeType << " | ";
         for (int i = 0; i < MAX_RECORDS - 1; ++i)
         {
-            cout << setw(2) << node.records[i] << " ";
+            cout << setw(3) << node.records[i] << " ";
         }
         cout << endl;
         nodeCount++;
@@ -239,41 +455,54 @@ int main()
     cout << "Index File Content After Creation:" << endl;
     DisplayIndexFileContent(filename);
 
-    InsertNewRecordAtIndex(filename, 3, 12);
-    InsertNewRecordAtIndex(filename, 7, 24);
-    InsertNewRecordAtIndex(filename, 10, 48);
-    InsertNewRecordAtIndex(filename, 24, 60);
-    InsertNewRecordAtIndex(filename, 14, 72);
+    InsertAtNewRecordAtIndex(filename, 3, 12);
+    InsertAtNewRecordAtIndex(filename, 7, 24);
+    InsertAtNewRecordAtIndex(filename, 10, 48);
+    InsertAtNewRecordAtIndex(filename, 24, 60);
+    InsertAtNewRecordAtIndex(filename, 14, 72);
 
     cout << "Index File Content After Insertions:" << endl;
     DisplayIndexFileContent(filename);
 
-    InsertNewRecordAtIndex(filename, 19, 84);
+    InsertAtNewRecordAtIndex(filename, 19, 84);
+
+    cout << "Index File Content After Split leaf:" << endl;
+    DisplayIndexFileContent(filename);
+
+    InsertAtNewRecordAtIndex(filename, 30, 96);
+    InsertAtNewRecordAtIndex(filename, 15, 108);
+    InsertAtNewRecordAtIndex(filename, 1, 120);
+    InsertAtNewRecordAtIndex(filename, 5, 132);
+
+    cout << "Index File Content After Update root:" << endl;
+    DisplayIndexFileContent(filename);
+
+    InsertAtNewRecordAtIndex(filename, 2, 144);
+
+    cout << "Index File Content After Split leaf:" << endl;
+    DisplayIndexFileContent(filename);
+
+    InsertAtNewRecordAtIndex(filename, 8, 156);
+    InsertAtNewRecordAtIndex(filename, 9, 168);
+    InsertAtNewRecordAtIndex(filename, 6, 180);
+    InsertAtNewRecordAtIndex(filename, 11, 192);
+    InsertAtNewRecordAtIndex(filename, 12, 204);
+    InsertAtNewRecordAtIndex(filename, 17, 216);
+    InsertAtNewRecordAtIndex(filename, 18, 228);
 
     cout << "Index File Content After Split:" << endl;
     DisplayIndexFileContent(filename);
 
-    DeleteRecordFromIndex(filename, 10);
+    InsertAtNewRecordAtIndex(filename, 32, 240);
 
-    cout << "Index File Content After Deletion:" << endl;
+    cout << "Index File Content After Split Root:" << endl;
     DisplayIndexFileContent(filename);
 
-    int ref = SearchARecord(filename, 7);
+    int ref = SearchARecord(filename, 32);
     if (ref != -1)
-        cout << "Record 7 found with reference: " << ref << endl;
+        cout << "Record 32 found with reference: " << ref << endl;
     else
-        cout << "Record 7 not found." << endl;
-    
-    DeleteRecordFromIndex(filename, 7);
-
-    cout << "Index File Content After Deletion:" << endl;
-    DisplayIndexFileContent(filename);
-
-    int ref2 = SearchARecord(filename, 7);
-    if (ref2 != -1)
-        cout << "Record 7 found with reference: " << ref2 << endl;
-    else
-        cout << "Record 7 not found." << endl;
+        cout << "Record 32 not found." << endl;
 
     return 0;
 }
